@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"in-mem-store/config"
 	"in-mem-store/core"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -18,7 +19,7 @@ HTTP 1.0 - Content-length header or inferred by TCP conn close
 HTTP 1.1 - Content-length header or Transfer-Encoding: chunked header. Persistent conn are default. Kept alive & reused
 HTTP 2 - Open always. No reliance on the above headers. Relies on END_STREAM flag in stream.
 */
-func readCommand(sock net.Conn) (*core.RedisCmd, error) {
+func readCommand(sock io.ReadWriter) (*core.RedisCmd, error) {
 	var buf []byte = make([]byte, 0, 1024)
 	temp := make([]byte, 512)
 
@@ -47,11 +48,11 @@ func readCommand(sock net.Conn) (*core.RedisCmd, error) {
 	}
 }
 
-func respondError(err error, sock net.Conn) {
+func respondError(err error, sock io.ReadWriter) {
 	sock.Write([]byte(fmt.Sprintf("-ERR %v\r\n", err)))
 }
 
-func respond(cmd *core.RedisCmd, sock net.Conn) {
+func respond(cmd *core.RedisCmd, sock io.ReadWriter) {
 	err := core.EvalAndRespond(cmd, sock)
 	if err != nil {
 		respondError(err, sock)

@@ -3,17 +3,16 @@ package core
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
-	"net"
 )
 
-func evalPING(args []string, sock net.Conn) error {
+func evalPING(args []string, sock io.ReadWriter) error {
 	var b []byte
 	if len(args) >= 2 {
 		return errors.New("ERR wrong number of arguments from 'ping' command")
 	}
 
-	log.Println("PONGG", len(args))
 	if len(args) == 0 {
 		b = Encode("PONG", true)
 	} else {
@@ -24,7 +23,7 @@ func evalPING(args []string, sock net.Conn) error {
 	return err
 }
 
-func EvalAndRespond(cmd *RedisCmd, sock net.Conn) error {
+func EvalAndRespond(cmd *RedisCmd, sock io.ReadWriter) error {
 	log.Println("evalresp", cmd, sock)
 	switch cmd.Cmd {
 	case "PING":

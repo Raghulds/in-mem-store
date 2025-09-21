@@ -16,11 +16,5 @@ func setupFlags() {
 func main() {
 	setupFlags()
 	log.Println("Starting In-memory store")
-	server.RunSyncTcpServer()
-	// l, err := core.Decode([]byte(":9\r\n2345678\r\n"))
-	// if err != nil {
-	// 	log.Println("decode err ---", err)
-	// }
-
-	// log.Println("Decoded", l)
+	server.RunAsyncTcpServer()
 }
