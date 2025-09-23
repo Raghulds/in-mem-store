@@ -26,14 +26,24 @@ func RunAsyncTcpServer() error {
 	}
 	defer syscall.Close(serverFD)
 
+	// Allow quick rebinding after restarts
+	if err = syscall.SetsockoptInt(serverFD, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
+		log.Println("setsockopt SO_REUSEADDR", err)
+		return err
+	}
+
 	// Set socket to operate in NON-BLOCKING way - TCP non blocking
 	if err = syscall.SetNonblock(serverFD, true); err != nil {
 		log.Println("serverFD non blocking", err)
 		return err
 	}
 
-	// Bind socket to Host & Port
-	ip := net.ParseIP(config.Host)
+	// Bind socket to Host & Port (ensure IPv4 bytes)
+	ip := net.ParseIP(config.Host).To4()
+	if ip == nil {
+		// Fallback to 0.0.0.0 if parsing failed
+		ip = net.IPv4zero
+	}
 	bindErr := syscall.Bind(serverFD, &syscall.SockaddrInet4{
 		Addr: [4]byte{ip[0], ip[1], ip[2], ip[3]},
 		Port: config.Port,

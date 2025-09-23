@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
+	"time"
 )
+
+var RESP_NIL []byte = []byte("$-1\r\n")
 
 func evalPING(args []string, sock io.ReadWriter) error {
 	var b []byte
@@ -23,13 +27,103 @@ func evalPING(args []string, sock io.ReadWriter) error {
 	return err
 }
 
+func evalSET(args []string, sock io.ReadWriter) error {
+	log.Println("evaLSet", args)
+	if len(args) < 2 {
+		return errors.New("not a valid args to set")
+	}
+
+	var key, value string
+	var expiryDuration int64 = -1
+	key, value = args[0], args[1]
+
+	for i := 2; i < len(args); i++ {
+		switch args[i] {
+		case "EX", "ex":
+			i++
+			if i == len(args) {
+				return errors.New("syntax error")
+			}
+
+			exDurationSec, err := strconv.ParseInt(args[3], 10, 64)
+			if err != nil {
+				return errors.New("expiry value is not an integer or out of range")
+			}
+			expiryDuration = exDurationSec * 1000
+		}
+	}
+
+	obj := NewObj(value, expiryDuration)
+	Put(key, obj)
+	sock.Write([]byte("+OK\r\n"))
+	return nil
+}
+
+func evalGET(args []string, sock io.ReadWriter) error {
+	log.Println("evaLGet", args)
+	if len(args) < 1 {
+		return errors.New("not a valid args to get")
+	}
+
+	var key string = args[0]
+	val := Get(key)
+
+	log.Println("evalGETTT --- ", key, val)
+	if val == nil {
+		sock.Write(RESP_NIL)
+		return nil
+	}
+
+	if val.ExpiresAt != -1 && val.ExpiresAt <= time.Now().UnixMilli() {
+		sock.Write((RESP_NIL))
+		return nil
+	}
+
+	encoded := Encode(val.Value, false)
+	sock.Write(encoded)
+	return nil
+}
+
+func evalTTL(args []string, sock io.ReadWriter) error {
+	if len(args) < 1 {
+		return errors.New("not a valid args to ttl")
+	}
+
+	var key = args[0]
+	var obj = Get(key)
+	if obj == nil {
+		sock.Write([]byte(":-2\r\n"))
+		return nil
+	}
+
+	if obj.ExpiresAt == -1 {
+		sock.Write([]byte(":-1\r\n"))
+		return nil
+	}
+
+	if time.Now().UnixMilli() > obj.ExpiresAt {
+		sock.Write([]byte(":-2\r\n"))
+		return nil
+	}
+
+	msRemaining := obj.ExpiresAt - time.Now().UnixMilli()
+	secs := msRemaining / 1000
+	sock.Write(Encode(secs, false))
+	return nil
+}
+
 func EvalAndRespond(cmd *RedisCmd, sock io.ReadWriter) error {
 	log.Println("evalresp", cmd, sock)
 	switch cmd.Cmd {
 	case "PING":
 		return evalPING(cmd.Args, sock)
+	case "SET":
+		return evalSET(cmd.Args, sock)
+	case "GET":
+		return evalGET(cmd.Args, sock)
+	case "TTL":
+		return evalTTL(cmd.Args, sock)
 	default:
-		// Return error for unknown commands
 		errorMsg := fmt.Sprintf("ERR unknown command '%s'", cmd.Cmd)
 		_, err := sock.Write([]byte(fmt.Sprintf("-ERR %s\r\n", errorMsg)))
 		return err
