@@ -1,6 +1,9 @@
 package core
 
-import "time"
+import (
+	"log"
+	"time"
+)
 
 var store map[string]*Obj
 
@@ -30,5 +33,22 @@ func Put(key string, value *Obj) {
 }
 
 func Get(key string) *Obj {
+	v := store[key]
+	if v != nil {
+		if v.ExpiresAt != -1 && v.ExpiresAt < time.Now().UnixMilli() {
+			// Passive deletion
+			log.Println("PASSIVE deletion")
+			delete(store, key)
+			return nil
+		}
+	}
 	return store[key]
+}
+
+func Del(key string) bool {
+	if _, ok := store[key]; ok {
+		delete(store, key)
+		return true
+	}
+	return false
 }

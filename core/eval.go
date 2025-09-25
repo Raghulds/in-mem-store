@@ -28,7 +28,6 @@ func evalPING(args []string, sock io.ReadWriter) error {
 }
 
 func evalSET(args []string, sock io.ReadWriter) error {
-	log.Println("evaLSet", args)
 	if len(args) < 2 {
 		return errors.New("not a valid args to set")
 	}
@@ -60,7 +59,6 @@ func evalSET(args []string, sock io.ReadWriter) error {
 }
 
 func evalGET(args []string, sock io.ReadWriter) error {
-	log.Println("evaLGet", args)
 	if len(args) < 1 {
 		return errors.New("not a valid args to get")
 	}
@@ -68,7 +66,6 @@ func evalGET(args []string, sock io.ReadWriter) error {
 	var key string = args[0]
 	val := Get(key)
 
-	log.Println("evalGETTT --- ", key, val)
 	if val == nil {
 		sock.Write(RESP_NIL)
 		return nil
@@ -112,6 +109,43 @@ func evalTTL(args []string, sock io.ReadWriter) error {
 	return nil
 }
 
+func evalEXPIRY(args []string, sock io.ReadWriter) error {
+	if len(args) < 2 {
+		return errors.New("not a valid args to set")
+	}
+
+	var key string
+	var expiryDuration int64 = -1
+	key = args[0]
+	value := Get(key)
+	if value == nil || (value.ExpiresAt != -1 && value.ExpiresAt < time.Now().UnixMilli()) {
+		sock.Write(RESP_NIL)
+		return nil
+	}
+
+	exDurationSec, err := strconv.ParseInt(args[1], 10, 64)
+	if err != nil {
+		return errors.New("expiry value is not an integer or out of range")
+	}
+	expiryDuration = exDurationSec * 1000
+
+	value.ExpiresAt = time.Now().UnixMilli() + expiryDuration
+	Put(key, value)
+	sock.Write([]byte("+OK\r\n"))
+	return nil
+}
+
+func evalDELETE(args []string, sock io.ReadWriter) error {
+	deletedCount := 0
+	for i := 0; i < len(args); i++ {
+		if ok := Del(args[i]); ok {
+			deletedCount++
+		}
+	}
+	sock.Write(Encode(deletedCount, false))
+	return nil
+}
+
 func EvalAndRespond(cmd *RedisCmd, sock io.ReadWriter) error {
 	log.Println("evalresp", cmd, sock)
 	switch cmd.Cmd {
@@ -123,6 +157,10 @@ func EvalAndRespond(cmd *RedisCmd, sock io.ReadWriter) error {
 		return evalGET(cmd.Args, sock)
 	case "TTL":
 		return evalTTL(cmd.Args, sock)
+	case "DELETE":
+		return evalDELETE(cmd.Args, sock)
+	case "EXPIRY":
+		return evalEXPIRY(cmd.Args, sock)
 	default:
 		errorMsg := fmt.Sprintf("ERR unknown command '%s'", cmd.Cmd)
 		_, err := sock.Write([]byte(fmt.Sprintf("-ERR %s\r\n", errorMsg)))
