@@ -6,14 +6,17 @@ import (
 	"log"
 	"net"
 	"syscall"
+	"time"
 )
 
 var con_clients = 0
+var CRONFrequencyMs time.Duration = 60
 
 func RunAsyncTcpServer() error {
 	log.Println("starting an asynchronous TXP server on", config.Host, config.Port)
 
 	max_clients := 20000
+	lastCRONExecutionTime := time.Now()
 
 	// IO ready connections
 	var events []syscall.EpollEvent = make([]syscall.EpollEvent, max_clients)
@@ -78,6 +81,11 @@ func RunAsyncTcpServer() error {
 
 	log.Println("listening", epollFD)
 	for {
+		if time.Now().After(lastCRONExecutionTime.Add(CRONFrequencyMs)) {
+			core.DeleteExpiredKeys()
+			lastCRONExecutionTime = time.Now()
+		}
+
 		// Check if any FD is ready for IO
 		nevents, err := syscall.EpollWait(epollFD, events, 1)
 		if err != nil {
