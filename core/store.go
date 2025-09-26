@@ -1,6 +1,7 @@
 package core
 
 import (
+	"in-mem-store/config"
 	"log"
 	"time"
 )
@@ -29,6 +30,9 @@ func NewObj(value interface{}, durationInMs int64) *Obj {
 }
 
 func Put(key string, value *Obj) {
+	if len(store) >= config.EvictionLimit {
+		evict()
+	}
 	store[key] = value
 }
 
