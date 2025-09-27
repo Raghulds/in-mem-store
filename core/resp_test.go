@@ -65,7 +65,7 @@ func TestDecode_BulkString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode error: %v", err)
 	}
-	if s, ok := val.(string); !ok || s != "world" {
+	if s, ok := val[0].(string); !ok || s != "world" {
 		t.Fatalf("Decode value = %#v, want %q", val, "world")
 	}
 }

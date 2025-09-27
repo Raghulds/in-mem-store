@@ -113,33 +113,23 @@ func DecodeOne(command []byte) (interface{}, int, error) {
 	}
 }
 
-func Decode(command []byte) (interface{}, error) {
-	if len(command) == 0 {
-		return "", errors.New("empty command")
+func Decode(data []byte) ([]interface{}, error) {
+	if len(data) == 0 {
+		return nil, errors.New("no data")
+	}
+	var index int = 0
+	var values []interface{} = make([]interface{}, 0)
+	for index < len(data) {
+		value, delta, err := DecodeOne(data[index:])
+		if err != nil {
+			return nil, err
+		}
+
+		index = index + delta
+		values = append(values, value)
 	}
 
-	log.Printf("Decoding command: %q", string(command))
-	value, consumed, err := DecodeOne(command)
-	log.Printf("Decoded value: %v, consumed: %d, error: %v", value, consumed, err)
-	return value, err
-}
-
-func DecodeArrayString(data []byte) ([]string, error) {
-	value, err := Decode(data)
-	if err != nil {
-		return nil, err
-	}
-
-	array, ok := value.([]interface{})
-	if !ok {
-		return nil, errors.New("expected array")
-	}
-
-	tokens := make([]string, len(array))
-	for i, v := range array {
-		tokens[i] = v.(string)
-	}
-	return tokens, nil
+	return values, nil
 }
 
 func Encode(str interface{}, isSimpleString bool) []byte {
@@ -152,7 +142,11 @@ func Encode(str interface{}, isSimpleString bool) []byte {
 
 	case int, int8, int16, int32, int64:
 		return []byte(fmt.Sprintf(":%d\r\n", v))
-	}
 
-	return RESP_NIL
+	case error:
+		return []byte(fmt.Sprintf("-%s\r\n", v))
+
+	default:
+		return RESP_NIL
+	}
 }

@@ -28,7 +28,6 @@ func expireSample() float32 {
 }
 
 func DeleteExpiredKeys() {
-	log.Println("Sampling for deleting expired keys!!")
 	for {
 		samplingFactor := expireSample()
 

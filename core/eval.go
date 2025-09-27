@@ -1,8 +1,8 @@
 package core
 
 import (
+	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"strconv"
@@ -10,11 +10,16 @@ import (
 )
 
 var RESP_NIL []byte = []byte("$-1\r\n")
+var RESP_MINUS_1 []byte = []byte(":-1\r\n")
+var RESP_MINUS_2 []byte = []byte(":-2\r\n")
+var RESP_ONE []byte = []byte(":1\r\n")
+var RESP_ZERO []byte = []byte(":0\r\n")
+var RESP_OK []byte = []byte("+OK\r\n")
 
-func evalPING(args []string, sock io.ReadWriter) error {
+func evalPING(args []string) []byte {
 	var b []byte
 	if len(args) >= 2 {
-		return errors.New("ERR wrong number of arguments from 'ping' command")
+		return Encode(errors.New("ERR wrong number of arguments from 'ping' command"), false)
 	}
 
 	if len(args) == 0 {
@@ -23,13 +28,12 @@ func evalPING(args []string, sock io.ReadWriter) error {
 		b = Encode(args[0], false)
 	}
 
-	_, err := sock.Write(b)
-	return err
+	return b
 }
 
-func evalSET(args []string, sock io.ReadWriter) error {
+func evalSET(args []string) []byte {
 	if len(args) < 2 {
-		return errors.New("not a valid args to set")
+		return Encode(errors.New("not a valid args to set"), false)
 	}
 
 	var key, value string
@@ -41,12 +45,12 @@ func evalSET(args []string, sock io.ReadWriter) error {
 		case "EX", "ex":
 			i++
 			if i == len(args) {
-				return errors.New("syntax error")
+				return Encode(errors.New("syntax error"), false)
 			}
 
 			exDurationSec, err := strconv.ParseInt(args[3], 10, 64)
 			if err != nil {
-				return errors.New("expiry value is not an integer or out of range")
+				return Encode(errors.New("expiry value is not an integer or out of range"), false)
 			}
 			expiryDuration = exDurationSec * 1000
 		}
@@ -54,64 +58,56 @@ func evalSET(args []string, sock io.ReadWriter) error {
 
 	obj := NewObj(value, expiryDuration)
 	Put(key, obj)
-	sock.Write([]byte("+OK\r\n"))
-	return nil
+	return RESP_OK
 }
 
-func evalGET(args []string, sock io.ReadWriter) error {
+func evalGET(args []string) []byte {
 	if len(args) < 1 {
-		return errors.New("not a valid args to get")
+		return Encode(errors.New("not a valid args to get"), false)
 	}
 
 	var key string = args[0]
 	val := Get(key)
 
 	if val == nil {
-		sock.Write(RESP_NIL)
-		return nil
+		return RESP_NIL
 	}
 
 	if val.ExpiresAt != -1 && val.ExpiresAt <= time.Now().UnixMilli() {
-		sock.Write((RESP_NIL))
-		return nil
+		return RESP_NIL
 	}
 
 	encoded := Encode(val.Value, false)
-	sock.Write(encoded)
-	return nil
+	return encoded
 }
 
-func evalTTL(args []string, sock io.ReadWriter) error {
+func evalTTL(args []string) []byte {
 	if len(args) < 1 {
-		return errors.New("not a valid args to ttl")
+		return Encode(errors.New("not a valid args to ttl"), false)
 	}
 
 	var key = args[0]
 	var obj = Get(key)
 	if obj == nil {
-		sock.Write([]byte(":-2\r\n"))
-		return nil
+		return RESP_MINUS_2
 	}
 
 	if obj.ExpiresAt == -1 {
-		sock.Write([]byte(":-1\r\n"))
-		return nil
+		return RESP_MINUS_1
 	}
 
 	if time.Now().UnixMilli() > obj.ExpiresAt {
-		sock.Write([]byte(":-2\r\n"))
-		return nil
+		return RESP_MINUS_2
 	}
 
 	msRemaining := obj.ExpiresAt - time.Now().UnixMilli()
 	secs := msRemaining / 1000
-	sock.Write(Encode(secs, false))
-	return nil
+	return Encode(secs, false)
 }
 
-func evalEXPIRY(args []string, sock io.ReadWriter) error {
+func evalEXPIRY(args []string) []byte {
 	if len(args) < 2 {
-		return errors.New("not a valid args to set")
+		return Encode(errors.New("not a valid args to set"), false)
 	}
 
 	var key string
@@ -119,51 +115,51 @@ func evalEXPIRY(args []string, sock io.ReadWriter) error {
 	key = args[0]
 	value := Get(key)
 	if value == nil || (value.ExpiresAt != -1 && value.ExpiresAt < time.Now().UnixMilli()) {
-		sock.Write(RESP_NIL)
-		return nil
+		return RESP_NIL
 	}
 
 	exDurationSec, err := strconv.ParseInt(args[1], 10, 64)
 	if err != nil {
-		return errors.New("expiry value is not an integer or out of range")
+		return Encode(errors.New("expiry value is not an integer or out of range"), false)
 	}
 	expiryDuration = exDurationSec * 1000
 
 	value.ExpiresAt = time.Now().UnixMilli() + expiryDuration
 	Put(key, value)
-	sock.Write([]byte("+OK\r\n"))
-	return nil
+	return RESP_OK
 }
 
-func evalDELETE(args []string, sock io.ReadWriter) error {
+func evalDELETE(args []string) []byte {
 	deletedCount := 0
 	for i := 0; i < len(args); i++ {
 		if ok := Del(args[i]); ok {
 			deletedCount++
 		}
 	}
-	sock.Write(Encode(deletedCount, false))
-	return nil
+	return Encode(deletedCount, false)
 }
 
-func EvalAndRespond(cmd *RedisCmd, sock io.ReadWriter) error {
-	log.Println("evalresp", cmd, sock)
-	switch cmd.Cmd {
-	case "PING":
-		return evalPING(cmd.Args, sock)
-	case "SET":
-		return evalSET(cmd.Args, sock)
-	case "GET":
-		return evalGET(cmd.Args, sock)
-	case "TTL":
-		return evalTTL(cmd.Args, sock)
-	case "DELETE":
-		return evalDELETE(cmd.Args, sock)
-	case "EXPIRY":
-		return evalEXPIRY(cmd.Args, sock)
-	default:
-		errorMsg := fmt.Sprintf("ERR unknown command '%s'", cmd.Cmd)
-		_, err := sock.Write([]byte(fmt.Sprintf("-ERR %s\r\n", errorMsg)))
-		return err
+func EvalAndRespond(cmds RedisCmds, sock io.ReadWriter) {
+	log.Println("evalresp", cmds, sock)
+	var buf bytes.Buffer
+
+	for _, cmd := range cmds {
+		switch cmd.Cmd {
+		case "PING":
+			buf.Write(evalPING(cmd.Args))
+		case "SET":
+			buf.Write(evalSET(cmd.Args))
+		case "GET":
+			buf.Write(evalGET(cmd.Args))
+		case "TTL":
+			buf.Write(evalTTL(cmd.Args))
+		case "DEL":
+			buf.Write(evalDELETE(cmd.Args))
+		case "EXPIRE":
+			buf.Write(evalEXPIRY(cmd.Args))
+		default:
+			buf.Write(evalPING(cmd.Args))
+		}
 	}
+	sock.Write(buf.Bytes())
 }
