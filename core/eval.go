@@ -139,6 +139,11 @@ func evalDELETE(args []string) []byte {
 	return Encode(deletedCount, false)
 }
 
+func evalBGREWRITEAOF() []byte {
+	dumpAllAOF()
+	return RESP_OK
+}
+
 func EvalAndRespond(cmds RedisCmds, sock io.ReadWriter) {
 	log.Println("evalresp", cmds, sock)
 	var buf bytes.Buffer
@@ -157,6 +162,8 @@ func EvalAndRespond(cmds RedisCmds, sock io.ReadWriter) {
 			buf.Write(evalDELETE(cmd.Args))
 		case "EXPIRE":
 			buf.Write(evalEXPIRY(cmd.Args))
+		case "BGREWRITEAOF":
+			buf.Write(evalBGREWRITEAOF())
 		default:
 			buf.Write(evalPING(cmd.Args))
 		}

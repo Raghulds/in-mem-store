@@ -5,4 +5,5 @@ var (
 	Port             int
 	EvictionLimit    int    = 5
 	EvictionStrategy string = "simple-string"
+	AOF_File         string = "./aof-log.aof"
 )
