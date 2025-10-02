@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"strconv"
@@ -59,6 +60,7 @@ func evalSET(args []string) []byte {
 
 	obj := NewObj(value, expiryDuration, typeB, encodingB)
 	Put(key, obj)
+	updateKeySpaceStats(0, "keys")
 	return RESP_OK
 }
 
@@ -171,8 +173,19 @@ func evalINCR(args []string) []byte {
 	return Encode(i, false)
 }
 
+func evalINFO() []byte {
+	var info []byte
+	var buf = bytes.NewBuffer(info)
+	buf.WriteString("# Keyspace\r\n")
+	log.Println("KeySpaceStats", KeySpaceStats)
+	for i := range KeySpaceStats {
+		log.Println("KeySpaceStats[i]", KeySpaceStats[i])
+		buf.WriteString(fmt.Sprintf("DB %d: keys=%d, expires=0, avg_ttl=0\r\n", i, KeySpaceStats[i]["keys"]))
+	}
+	return Encode(buf.String(), false)
+}
+
 func EvalAndRespond(cmds RedisCmds, sock io.ReadWriter) {
-	log.Println("evalresp", cmds, sock)
 	var buf bytes.Buffer
 
 	for _, cmd := range cmds {
@@ -191,6 +204,8 @@ func EvalAndRespond(cmds RedisCmds, sock io.ReadWriter) {
 			buf.Write(evalEXPIRY(cmd.Args))
 		case "INCR":
 			buf.Write(evalINCR(cmd.Args))
+		case "INFO":
+			buf.Write(evalINFO())
 		case "BGREWRITEAOF":
 			buf.Write(evalBGREWRITEAOF())
 		default:
