@@ -8,6 +8,6 @@ func init() {
 	}
 }
 
-func updateKeySpaceStats(db int, metric string) {
+func AddKeySpaceStatsCount(db int, metric string) {
 	KeySpaceStats[db][metric]++
 }

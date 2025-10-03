@@ -48,6 +48,7 @@ func Get(key string) *Obj {
 func Del(key string) bool {
 	if _, ok := store[key]; ok {
 		delete(store, key)
+		KeySpaceStats[0]["keys"]--
 		return true
 	}
 	return false

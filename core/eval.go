@@ -60,7 +60,7 @@ func evalSET(args []string) []byte {
 
 	obj := NewObj(value, expiryDuration, typeB, encodingB)
 	Put(key, obj)
-	updateKeySpaceStats(0, "keys")
+	AddKeySpaceStatsCount(0, "keys")
 	return RESP_OK
 }
 
@@ -212,5 +212,8 @@ func EvalAndRespond(cmds RedisCmds, sock io.ReadWriter) {
 			buf.Write(evalPING(cmd.Args))
 		}
 	}
-	sock.Write(buf.Bytes())
+	_, err := sock.Write(buf.Bytes())
+	if err != nil {
+		log.Printf("Failed to write response: %v", err)
+	}
 }
